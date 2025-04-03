@@ -22,6 +22,8 @@ typedef struct {
   size_t capacity;
 } HashMap;
 
+void free_hashmap(HashMap *hashmap);
+
 HashMap *create_hashmap();
 
 void hashmap_add(HashMap *hashmap, char *key, void *value);
