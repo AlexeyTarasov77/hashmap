@@ -20,6 +20,21 @@ void free_hashmap(HashMap *hashmap) {
   free(hashmap);
 }
 
+hashmap_item *hashmap_list_items(HashMap *hashmap) {
+  hashmap_item *items = malloc(hashmap->size * sizeof(hashmap_item));
+  linked_list_item *next;
+  int k = 0;
+  for (int i = 0; i < hashmap->capacity; i++) {
+    next = hashmap->arr[i];
+    while (next != NULL) {
+      items[k] = next->data;
+      k++;
+      next = next->next;
+    }
+  }
+  return items;
+}
+
 // external MurmurHash3 hash function
 static uint32_t hash(HashMap *hashmap, const char *key) {
   uint32_t h = HASH_SEED;
@@ -124,6 +139,7 @@ int hashmap_remove(HashMap *hashmap, char *key) {
   linked_list_item *next = hashmap->arr[i];
   if (next == NULL || next->next == NULL) {
     hashmap->arr[i] = NULL;
+    hashmap->size--;
     return 0;
   }
   linked_list_item *prev = next;
@@ -132,6 +148,7 @@ int hashmap_remove(HashMap *hashmap, char *key) {
     if (strlen(next->data.key) == strlen(key) &&
         strcmp(next->data.key, key) == 0) {
       prev->next = NULL;
+      hashmap->size--;
       return 0;
     }
     prev = next;
@@ -167,10 +184,6 @@ void run_tests() {
   hashmap_add(hashmap, "b", &(int){3});
   hashmap_add(hashmap, "c", &(int){10});
   hashmap_add(hashmap, "d", &(int){10});
-  if (hashmap_remove(hashmap, "d") != 0) {
-    puts("Hashmap delete failed");
-    count_tests_failed++;
-  }
   hashmap_add(hashmap, "pi", &(float){3.14F});
   hashmap_add(hashmap, "name", "steven");
   hashmap_add(hashmap, "numbers", numbers);
@@ -186,10 +199,6 @@ void run_tests() {
   }
   if ((tmp = hashmap_get(hashmap, "c")) == NULL || *(int *)tmp != 10) {
     printf("Test 3 failed! Expected: %d Got: %p\n", 10, tmp);
-    count_tests_failed++;
-  }
-  if ((tmp = hashmap_get(hashmap, "d")) != NULL) {
-    puts("Test 4 failed!");
     count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, "pi")) == NULL || *(float *)tmp != 3.14F) {
@@ -217,6 +226,22 @@ void run_tests() {
   if (hashmap->size != 8) {
     printf("Test 10 failed! Expected: %d, got: %ld\n", 8, hashmap->size);
     count_tests_failed++;
+  }
+  if (hashmap_remove(hashmap, "d") != 0) {
+    puts("Hashmap delete failed");
+    count_tests_failed++;
+  }
+  if ((tmp = hashmap_get(hashmap, "d")) != NULL) {
+    puts("Item exists after deletion");
+    count_tests_failed++;
+  }
+  if (hashmap->size != 7) {
+    puts("Deletion didn't decrement size");
+    count_tests_failed++;
+  }
+  hashmap_item *items = hashmap_list_items(hashmap);
+  for (int i = 0; i < hashmap->size; i++) {
+    printf("%s: %p\n", items[i].key, items[i].value);
   }
   free_hashmap(hashmap);
   if (count_tests_failed)
