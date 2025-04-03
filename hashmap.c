@@ -12,8 +12,16 @@ HashMap *create_hashmap() {
   return hashmap;
 }
 
+void free_hashmap(HashMap *hashmap) {
+  for (int i = 0; i < hashmap->capacity; i++) {
+    free(hashmap->arr[i]);
+  }
+  free(hashmap->arr);
+  free(hashmap);
+}
+
 // external MurmurHash3 hash function
-static uint32_t hashfunc(HashMap *hashmap, const char *key) {
+static uint32_t hash(HashMap *hashmap, const char *key) {
   uint32_t h = HASH_SEED;
   size_t len = strlen(key);
   uint32_t c1 = 0xcc9e2d51;
@@ -41,31 +49,60 @@ static uint32_t hashfunc(HashMap *hashmap, const char *key) {
 }
 
 static void hashmap_extend(HashMap *hashmap) {
+  printf("Extending\n");
   // reallocate data and reapply hashfunc during copying
-  size_t new_capacity =
-      hashmap->capacity * 2 * sizeof(linked_list_item *); // x2 capacity
-  linked_list_item **dst = malloc(new_capacity);
-  memcpy(dst, hashmap->arr, hashmap->capacity);
+  size_t old_capacity = hashmap->capacity;
+  size_t new_capacity = old_capacity * 2; // x2 capacity
+  linked_list_item **dst = calloc(new_capacity, sizeof(linked_list_item *));
+  hashmap->capacity = new_capacity;
+  for (int i = 0; i < old_capacity; i++) {
+    linked_list_item *item = hashmap->arr[i];
+    if (item == HASHMAP_EMPTY_VALUE)
+      continue;
+    // recompute hash to distribute elements
+    // accross new available space
+    uint32_t j = hash(hashmap, item->data.key);
+    dst[j] = item;
+    if (item->next == NULL)
+      continue;
+    linked_list_item *prev = item;
+    linked_list_item *next = item->next;
+    while (next != NULL) {
+      uint32_t k = hash(hashmap, next->data.key);
+      if (k != j) {
+        dst[k] = next;
+        next = next->next;
+        prev->next = NULL;
+      } else {
+        prev->next = next;
+        prev = next;
+        next = next->next;
+      }
+    }
+  }
   free(hashmap->arr);
   hashmap->arr = dst;
-  hashmap->capacity = new_capacity;
 }
 
 void hashmap_add(HashMap *hashmap, char *key, void *value) {
-  float a = (float)hashmap->size / (float)hashmap->capacity;
-  if (a >= 0.8) {
+  float fill_factor = (float)hashmap->size / (float)hashmap->capacity;
+  if (fill_factor >= 0.7) {
     hashmap_extend(hashmap);
   }
-  uint32_t i = hashfunc(hashmap, key);
+  uint32_t i = hash(hashmap, key);
+  printf("Index for %s: %d\n", key, i);
   linked_list_item *new_item = malloc(sizeof(linked_list_item));
   new_item->data.key = key;
   new_item->data.value = value;
   if (hashmap->arr[i] != HASHMAP_EMPTY_VALUE) {
-    if (hashmap->arr[i]->data.key == key) {
+    printf("Comparing %s to %s\n", hashmap->arr[i]->data.key, key);
+    if (strcmp(hashmap->arr[i]->data.key, key) == 0) {
+      printf("Equal! UPdating value\n");
       hashmap->arr[i]->data.value = value;
       free(new_item);
       return;
     }
+    hashmap->size++;
     // Resolving collision by adding item to a linked list
     linked_list_item *next = hashmap->arr[i]->next;
     if (next == NULL) {
@@ -76,13 +113,14 @@ void hashmap_add(HashMap *hashmap, char *key, void *value) {
       next = next->next;
     }
     next->next = new_item;
-  } else {
-    hashmap->arr[i] = new_item;
+    return;
   }
+  hashmap->size++;
+  hashmap->arr[i] = new_item;
 }
 
 void *hashmap_get(HashMap *hashmap, char *key) {
-  uint32_t i = hashfunc(hashmap, key);
+  uint32_t i = hash(hashmap, key);
   linked_list_item *next = hashmap->arr[i];
   while (next != NULL) {
     if (strlen(next->data.key) == strlen(key) &&
@@ -96,40 +134,66 @@ void *hashmap_get(HashMap *hashmap, char *key) {
 
 void run_tests() {
   puts("Running tests...");
+  char test_key[] = "string";
+  char test_dup_key[sizeof(test_key)];
+  strcpy(test_dup_key, test_key);
+  int numbers[] = {1, 2, 3};
   HashMap *hashmap = create_hashmap();
   hashmap_add(hashmap, "a", &(int){1});
   hashmap_add(hashmap, "b", &(int){3});
   hashmap_add(hashmap, "c", &(int){10});
-  hashmap_add(hashmap, "str", "hello");
-  hashmap_add(hashmap, "pi", &(float){3.14});
-  uint8_t is_failed = 0;
+  hashmap_add(hashmap, "d", &(int){10});
+  hashmap_add(hashmap, "pi", &(float){3.14F});
+  hashmap_add(hashmap, "name", "steven");
+  hashmap_add(hashmap, "numbers", numbers);
+  hashmap_add(hashmap, test_key, "hello");
+  hashmap_add(hashmap, test_dup_key, "test");
+  const uint8_t count_all_tests = 8;
+  uint8_t count_tests_failed = 0;
   void *tmp;
   if ((tmp = hashmap_get(hashmap, "a")) == NULL || *(int *)tmp != 1) {
     puts("Test 1 failed!");
-    is_failed = 1;
+    count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, "b")) == NULL || *(int *)tmp != 3) {
     puts("Test 2 failed!");
-    is_failed = 1;
+    count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, "c")) == NULL || *(int *)tmp != 10) {
-    puts("Test 3 failed!");
-    is_failed = 1;
-  }
-  if ((tmp = hashmap_get(hashmap, "str")) == NULL ||
-      strcmp((char *)tmp, "hello") != 0) {
-    puts("Test 4 failed!");
-    is_failed = 1;
+    printf("Test 3 failed! Expected: %d Got: %p\n", 10, tmp);
+    count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, "pi")) == NULL || *(float *)tmp != 3.14F) {
-    puts("Test 5 failed!");
-    is_failed = 1;
+    puts("Test 4 failed!");
+    count_tests_failed++;
   }
-
-  free(hashmap->arr);
-  free(hashmap);
-  if (!is_failed)
-    puts("All tests succesfully passed\n");
+  if ((tmp = hashmap_get(hashmap, "name")) == NULL ||
+      strcmp(tmp, "steven") != 0) {
+    puts("Test 5 failed!");
+    count_tests_failed++;
+  }
+  if ((tmp = hashmap_get(hashmap, "numbers")) == NULL || *(int *)tmp != 1) {
+    printf("Test 6 failed! Got: %p\n", tmp);
+    count_tests_failed++;
+  }
+  if ((tmp = hashmap_get(hashmap, test_key)) == NULL ||
+      strcmp(tmp, "test") != 0) {
+    printf("Test 7 failed! Expected: %s Got: %s\n", "test", (char *)tmp);
+    count_tests_failed++;
+  }
+  if (hashmap->capacity != INITIAL_CAPACITY * 2) {
+    puts("Test 8 failed!");
+    count_tests_failed++;
+  }
+  if (hashmap->size != 8) {
+    printf("Test 9 failed! Expected: %d, got: %ld\n", 8, hashmap->size);
+    count_tests_failed++;
+  }
+  free_hashmap(hashmap);
+  if (count_tests_failed)
+    printf("%d tests failed out of %d", count_tests_failed, count_all_tests);
+  else
+    puts("All tests succesfully passed");
 }
 
 int main(int argc, char *argv[]) {
