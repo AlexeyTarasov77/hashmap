@@ -119,6 +119,27 @@ void hashmap_add(HashMap *hashmap, char *key, void *value) {
   hashmap->arr[i] = new_item;
 }
 
+int hashmap_remove(HashMap *hashmap, char *key) {
+  uint32_t i = hash(hashmap, key);
+  linked_list_item *next = hashmap->arr[i];
+  if (next == NULL || next->next == NULL) {
+    hashmap->arr[i] = NULL;
+    return 0;
+  }
+  linked_list_item *prev = next;
+  next = next->next;
+  while (next != NULL) {
+    if (strlen(next->data.key) == strlen(key) &&
+        strcmp(next->data.key, key) == 0) {
+      prev->next = NULL;
+      return 0;
+    }
+    prev = next;
+    next = next->next;
+  }
+  return 1;
+}
+
 void *hashmap_get(HashMap *hashmap, char *key) {
   uint32_t i = hash(hashmap, key);
   linked_list_item *next = hashmap->arr[i];
@@ -134,6 +155,9 @@ void *hashmap_get(HashMap *hashmap, char *key) {
 
 void run_tests() {
   puts("Running tests...");
+  const uint8_t count_all_tests = 8;
+  uint8_t count_tests_failed = 0;
+  void *tmp;
   char test_key[] = "string";
   char test_dup_key[sizeof(test_key)];
   strcpy(test_dup_key, test_key);
@@ -143,14 +167,15 @@ void run_tests() {
   hashmap_add(hashmap, "b", &(int){3});
   hashmap_add(hashmap, "c", &(int){10});
   hashmap_add(hashmap, "d", &(int){10});
+  if (hashmap_remove(hashmap, "d") != 0) {
+    puts("Hashmap delete failed");
+    count_tests_failed++;
+  }
   hashmap_add(hashmap, "pi", &(float){3.14F});
   hashmap_add(hashmap, "name", "steven");
   hashmap_add(hashmap, "numbers", numbers);
   hashmap_add(hashmap, test_key, "hello");
   hashmap_add(hashmap, test_dup_key, "test");
-  const uint8_t count_all_tests = 8;
-  uint8_t count_tests_failed = 0;
-  void *tmp;
   if ((tmp = hashmap_get(hashmap, "a")) == NULL || *(int *)tmp != 1) {
     puts("Test 1 failed!");
     count_tests_failed++;
@@ -163,30 +188,34 @@ void run_tests() {
     printf("Test 3 failed! Expected: %d Got: %p\n", 10, tmp);
     count_tests_failed++;
   }
-  if ((tmp = hashmap_get(hashmap, "pi")) == NULL || *(float *)tmp != 3.14F) {
+  if ((tmp = hashmap_get(hashmap, "d")) != NULL) {
     puts("Test 4 failed!");
+    count_tests_failed++;
+  }
+  if ((tmp = hashmap_get(hashmap, "pi")) == NULL || *(float *)tmp != 3.14F) {
+    puts("Test 5 failed!");
     count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, "name")) == NULL ||
       strcmp(tmp, "steven") != 0) {
-    puts("Test 5 failed!");
+    puts("Test 6 failed!");
     count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, "numbers")) == NULL || *(int *)tmp != 1) {
-    printf("Test 6 failed! Got: %p\n", tmp);
+    printf("Test 7 failed! Got: %p\n", tmp);
     count_tests_failed++;
   }
   if ((tmp = hashmap_get(hashmap, test_key)) == NULL ||
       strcmp(tmp, "test") != 0) {
-    printf("Test 7 failed! Expected: %s Got: %s\n", "test", (char *)tmp);
+    printf("Test 8 failed! Expected: %s Got: %s\n", "test", (char *)tmp);
     count_tests_failed++;
   }
   if (hashmap->capacity != INITIAL_CAPACITY * 2) {
-    puts("Test 8 failed!");
+    puts("Test 9 failed!");
     count_tests_failed++;
   }
   if (hashmap->size != 8) {
-    printf("Test 9 failed! Expected: %d, got: %ld\n", 8, hashmap->size);
+    printf("Test 10 failed! Expected: %d, got: %ld\n", 8, hashmap->size);
     count_tests_failed++;
   }
   free_hashmap(hashmap);
