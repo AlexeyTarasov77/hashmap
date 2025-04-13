@@ -30,4 +30,6 @@ void hashmap_add(HashMap *hashmap, char *key, void *value);
 void *hashmap_get(HashMap *hashmap, char *key);
 hashmap_item *hashmap_list_items(HashMap *hashmap);
 
+int hashmap_remove(HashMap *hashmap, char *key);
+
 #endif
